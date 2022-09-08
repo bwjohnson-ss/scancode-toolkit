@@ -8,7 +8,10 @@
       "has_license_text": true,
       "declared_copyrights": true,
       "conflicting_license_categories": true,
-      "ambiguous_compound_licensing": false
+      "ambiguous_compound_licensing": false,
+      "ambiguity_clue": {
+        "conflicting_license_categories": "Permissive declared license(s) is incompatible with other detected license(s): gpl-2.0-plus"
+      }
     }
   },
   "files": [
