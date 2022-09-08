@@ -189,6 +189,11 @@ def compute_license_score(codebase):
         scoring_elements.ambiguous_compound_licensing = True
         if scoring_elements.score > 0:
             scoring_elements.score -= 10
+        joined_license_expressions = ', '.join(unique_declared_license_expressions)
+        scoring_elements.ambiguity_clue['ambiguous_compound_licensing'] = (
+            f'Ambiguous compound licensing detected from key files: '
+            f'{joined_license_expressions}'
+        )
 
     return scoring_elements, declared_license_expression or ''
 
