@@ -134,7 +134,6 @@ def compute_license_score(codebase):
     )
 
     unique_declared_license_expressions = unique(declared_license_expressions)
-    declared_license_categories = get_license_categories(declared_licenses)
 
     copyrights = get_field_values_from_codebase_resources(
         codebase=codebase, field_name='copyrights', key_files_only=True
@@ -160,13 +159,21 @@ def compute_license_score(codebase):
     if scoring_elements.declared_copyrights:
         scoring_elements.score += 10
 
-    is_permissively_licensed = check_declared_license_categories(declared_license_categories)
-    if is_permissively_licensed:
-        scoring_elements.conflicting_license_categories = check_for_conflicting_licenses(
+    conflicting_declared_licenses = check_for_conflicting_licenses(declared_licenses)
+    if not conflicting_declared_licenses:
+        conflicting_other_licenses = check_for_conflicting_licenses(
             other_licenses
         )
-        if scoring_elements.conflicting_license_categories and scoring_elements.score > 0:
-            scoring_elements.score -= 20
+        if conflicting_other_licenses:
+            scoring_elements.conflicting_license_categories = True
+            if scoring_elements.score > 0:
+                scoring_elements.score -= 20
+            conflicting_license_expressions = get_license_expressions(conflicting_other_licenses)
+            joined_conflicting_license_expressions = ', '.join(conflicting_license_expressions)
+            scoring_elements.ambiguity_clue['conflicting_license_categories'] = (
+                f'Permissive declared license(s) is incompatible with other detected license(s): '
+                f'{joined_conflicting_license_expressions}'
+            )
 
     declared_license_expression = get_primary_license(unique_declared_license_expressions)
 
@@ -184,6 +191,16 @@ def compute_license_score(codebase):
             scoring_elements.score -= 10
 
     return scoring_elements, declared_license_expression or ''
+
+
+def get_license_expressions(license_infos):
+    license_expressions = []
+    for license_info in license_infos:
+        license_expression = license_info.get('matched_rule', {}).get('license_expression', '')
+        if license_expression in license_expressions:
+            continue
+        license_expressions.append(license_expression)
+    return license_expressions
 
 
 def unique(objects):
@@ -208,6 +225,7 @@ class ScoringElements:
     declared_copyrights = attr.ib(default=False)
     conflicting_license_categories = attr.ib(default=False)
     ambiguous_compound_licensing = attr.ib(default=False)
+    ambiguity_clue = attr.ib(default=attr.Factory(dict))
 
     def to_dict(self):
         return {
@@ -218,6 +236,7 @@ class ScoringElements:
             'declared_copyrights': self.declared_copyrights,
             'conflicting_license_categories': self.conflicting_license_categories,
             'ambiguous_compound_licensing': self.ambiguous_compound_licensing,
+            'ambiguity_clue': self.ambiguity_clue,
         }
 
 
@@ -320,18 +339,6 @@ def get_field_values_from_codebase_resources(codebase, field_name, key_files_onl
     return values
 
 
-def get_license_categories(license_infos):
-    """
-    Return a list of license category strings from `license_infos`
-    """
-    license_categories = []
-    for license_info in license_infos:
-        category = license_info.get('category', '')
-        if category not in license_categories:
-            license_categories.append(category)
-    return license_categories
-
-
 def check_for_license_texts(declared_licenses):
     """
     Check if any license in `declared_licenses` is from a license text or notice.
@@ -358,31 +365,28 @@ CONFLICTING_LICENSE_CATEGORIES = (
 )
 
 
-def check_declared_license_categories(declared_licenses):
+def is_conflicting_license(license_info):
     """
-    Check whether or not if the licenses in `declared_licenses` are permissively
-    licensed, or compatible with permissive licenses.
-
-    If so, return True. Otherwise, return False.
+    Return True if `license_info` is a license that conflicts with permissive
+    licenses
     """
-
-    for category in CONFLICTING_LICENSE_CATEGORIES:
-        if category in declared_licenses:
-            return False
-    return True
-
-
-def check_for_conflicting_licenses(other_licenses):
-    """
-    Check if there is a license in `other_licenses` that conflicts with
-    permissive licenses.
-
-    If so, return True. Otherwise, return False.
-    """
-    for license_info in other_licenses:
-        if license_info.get('category', '') in CONFLICTING_LICENSE_CATEGORIES:
-            return True
+    license_category = license_info.get('category', '')
+    if license_category in CONFLICTING_LICENSE_CATEGORIES:
+        return True
     return False
+
+
+def check_for_conflicting_licenses(declared_licenses):
+    """
+    Return a list of conflicting licenses from `declared_licenses` by checking
+    whether or not if the licenses in `declared_licenses` are permissively
+    licensed, or compatible with permissive licenses.
+    """
+    conflicting_licenses = []
+    for declared_license in declared_licenses:
+        if is_conflicting_license(declared_license):
+            conflicting_licenses.append(declared_license)
+    return conflicting_licenses
 
 
 def group_license_expressions(unique_license_expressions):
