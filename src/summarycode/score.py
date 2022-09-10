@@ -144,17 +144,26 @@ def compute_license_score(codebase):
 
     conflicting_declared_licenses = check_for_conflicting_licenses(key_files)
     if not conflicting_declared_licenses:
-        conflicting_other_licenses = check_for_conflicting_licenses_codebase(codebase)
-        if conflicting_other_licenses:
+        conflicting_resources = check_for_conflicting_licenses_codebase(codebase)
+        if conflicting_resources:
             scoring_elements.conflicting_license_categories = True
             if scoring_elements.score > 0:
                 scoring_elements.score -= 20
-            conflicting_license_expressions = get_license_expressions(conflicting_other_licenses)
-            joined_conflicting_license_expressions = ', '.join(conflicting_license_expressions)
-            scoring_elements.ambiguity_clue['conflicting_license_categories'] = (
-                f'Permissive declared license(s) is incompatible with other detected license(s): '
-                f'{joined_conflicting_license_expressions}'
-            )
+            crs = [
+                {
+                    'path':cr.path,
+                    'license_expressions':cr.license_expressions,
+                } for cr in conflicting_resources
+            ]
+            license_expressions = []
+            for cr in crs:
+                license_expressions.extend(cr['license_expressions'])
+            license_expressions = unique(license_expressions)
+            scoring_elements.ambiguity_clue['conflicting_license_categories'] = {
+                'clue': 'Incompatible licenses detected in Resources',
+                'conflicting_license_expressions': license_expressions,
+                'conflicting_resources': crs
+            }
 
     license_expressions = []
     for resource in codebase.walk(topdown=True):
@@ -360,14 +369,14 @@ def check_for_conflicting_licenses(key_files):
 
 
 def check_for_conflicting_licenses_codebase(codebase):
-    conflicting_licenses = []
+    conflicting_licenses_resources = []
     for resource in codebase.walk(topdown=True):
         if resource.is_key_file:
            continue
         for license in resource.licenses:
             if is_conflicting_license(license):
-                conflicting_licenses.append(license)
-    return conflicting_licenses
+                conflicting_licenses_resources.append(resource)
+    return conflicting_licenses_resources
 
 
 def check(key_files, checker_by_fields, scoring_elements):
