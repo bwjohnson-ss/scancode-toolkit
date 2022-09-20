@@ -7,6 +7,7 @@
 # See https://aboutcode.org for more information about nexB OSS projects.
 #
 
+from collections import defaultdict
 import attr
 
 from commoncode.cliutils import PluggableCommandLineOption
@@ -149,20 +150,31 @@ def compute_license_score(codebase):
             scoring_elements.conflicting_license_categories = True
             if scoring_elements.score > 0:
                 scoring_elements.score -= 20
-            crs = [
+
+            license_expressions_by_category = defaultdict(list)
+            for cr in conflicting_resources:
+                for license in cr.licenses:
+                    category = license.get('category')
+                    license_key = license.get('key')
+                    if not (category and license_key):
+                        continue
+                    license_expressions = license_expressions_by_category[category]
+                    if license_key in license_expressions:
+                        continue
+                    license_expressions.append(license_key)
+
+            license_categories = [
                 {
-                    'path':cr.path,
-                    'license_expressions':cr.license_expressions,
-                } for cr in conflicting_resources
+                    'category': category,
+                    "license_expressions": license_expressions,
+                } for category, license_expressions in license_expressions_by_category.items()
             ]
-            license_expressions = []
-            for cr in crs:
-                license_expressions.extend(cr['license_expressions'])
-            license_expressions = unique(license_expressions)
+            conflicting_paths = [cr.path for cr in conflicting_resources]
+
             scoring_elements.ambiguity_clue['conflicting_license_categories'] = {
-                'clue': 'Incompatible licenses detected in Resources',
-                'conflicting_license_expressions': license_expressions,
-                'conflicting_resources': crs
+                'description': 'Incompatible licenses detected in Resources',
+                'license_categories': license_categories,
+                'conflicting_paths': conflicting_paths
             }
 
     license_expressions = get_license_expressions_from_key_files(key_files)
@@ -180,11 +192,13 @@ def compute_license_score(codebase):
         scoring_elements.ambiguous_compound_licensing = True
         if scoring_elements.score > 0:
             scoring_elements.score -= 10
-        joined_license_expressions = ', '.join(license_expressions)
-        scoring_elements.ambiguity_clue['ambiguous_compound_licensing'] = (
-            f'Ambiguous compound licensing detected from key files: '
-            f'{joined_license_expressions}'
-        )
+
+        scoring_elements.ambiguity_clue['ambiguous_compound_licensing'] = {
+            'description': 'A license choice cannot be determined from declared licenses from key files.',
+            'key_file_paths': [
+                key_file.path for key_file in key_files if key_file.licenses
+            ]
+        }
 
     return scoring_elements, declared_license_expression or ''
 
@@ -234,11 +248,6 @@ class ScoringElements:
             'ambiguous_compound_licensing': self.ambiguous_compound_licensing,
             'ambiguity_clue': self.ambiguity_clue,
         }
-
-
-# minimum score to consider a license detection as good.
-
-# MIN_GOOD_LICENSE_SCORE = 80
 
 
 @attr.s(slots=True)
@@ -386,36 +395,6 @@ def collect_key_files(codebase):
                 yield child
 
 
-def get_field_values_from_codebase_resources(codebase, field_name, key_files_only=False):
-    """
-    Return a list of values from the `field_name` field of the Resources from
-    `codebase`
-
-    If `key_files_only` is True, then we only return the field values from
-    Resources classified as key files.
-
-    If `key_files_only` is False, then we return the field values from Resources
-    that are not classified as key files.
-    """
-    values = []
-    for resource in codebase.walk(topdown=True):
-        if not (resource.is_dir and resource.is_top_level):
-            continue
-        for child in resource.walk(codebase):
-            if key_files_only:
-                if not child.is_key_file:
-                    continue
-            else:
-                if child.is_key_file:
-                    continue
-            for detected_license in getattr(child, field_name, []) or []:
-                values.append(detected_license)
-    return values
-
-
-
-
-
 CONFLICTING_LICENSE_CATEGORIES = (
     'Commercial',
     'Copyleft',
@@ -433,19 +412,6 @@ def is_conflicting_license(license_info):
     if license_category in CONFLICTING_LICENSE_CATEGORIES:
         return True
     return False
-
-
-# def check_for_conflicting_licenses(declared_licenses):
-#     """
-#     Return a list of conflicting licenses from `declared_licenses` by checking
-#     whether or not if the licenses in `declared_licenses` are permissively
-#     licensed, or compatible with permissive licenses.
-#     """
-#     conflicting_licenses = []
-#     for declared_license in declared_licenses:
-#         if is_conflicting_license(declared_license):
-#             conflicting_licenses.append(declared_license)
-#     return conflicting_licenses
 
 
 def group_license_expressions(unique_license_expressions):
@@ -497,11 +463,6 @@ def get_license_expressions_from_key_files(key_files):
                 continue
             license_expressions.append(license_expression)
     return license_expressions
-
-
-def get_primary_license_from_key_files(key_files):
-    declared_license_expressions = get_license_expressions_from_key_files(key_files)
-    return get_primary_license(declared_license_expressions)
 
 
 def get_primary_license(declared_license_expressions):
