@@ -165,20 +165,13 @@ def compute_license_score(codebase):
                 'conflicting_resources': crs
             }
 
-    license_expressions = []
-    for resource in codebase.walk(topdown=True):
-        if resource.is_key_file:
-            for license_expression in resource.license_expressions:
-                if license_expression not in license_expressions:
-                    license_expressions.append(license_expression)
+    license_expressions = get_license_expressions_from_key_files(key_files)
+    declared_license_expression = get_primary_license(license_expressions)
 
-    unique_declared_license_expressions = license_expressions
-    declared_license_expression = get_primary_license(unique_declared_license_expressions)
-
-    if not declared_license_expression:
+    if not declared_license_expression and license_expressions:
         # If we cannot get a single primary license, then we combine and simplify the license expressions from key files
         combined_declared_license_expression = combine_expressions(
-            unique_declared_license_expressions
+            license_expressions
         )
         if combined_declared_license_expression:
             declared_license_expression = str(
@@ -187,7 +180,7 @@ def compute_license_score(codebase):
         scoring_elements.ambiguous_compound_licensing = True
         if scoring_elements.score > 0:
             scoring_elements.score -= 10
-        joined_license_expressions = ', '.join(unique_declared_license_expressions)
+        joined_license_expressions = ', '.join(license_expressions)
         scoring_elements.ambiguity_clue['ambiguous_compound_licensing'] = (
             f'Ambiguous compound licensing detected from key files: '
             f'{joined_license_expressions}'
@@ -494,6 +487,21 @@ def group_license_expressions(unique_license_expressions):
         unique_joined_expressions = joined_expressions
 
     return unique_joined_expressions, single_expressions
+
+
+def get_license_expressions_from_key_files(key_files):
+    license_expressions = []
+    for key_file in key_files:
+        for license_expression in key_file.license_expressions:
+            if license_expression in license_expressions:
+                continue
+            license_expressions.append(license_expression)
+    return license_expressions
+
+
+def get_primary_license_from_key_files(key_files):
+    declared_license_expressions = get_license_expressions_from_key_files(key_files)
+    return get_primary_license(declared_license_expressions)
 
 
 def get_primary_license(declared_license_expressions):
