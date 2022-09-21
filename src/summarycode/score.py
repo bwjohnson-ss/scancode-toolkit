@@ -127,55 +127,22 @@ def compute_license_score(codebase):
     scoring_elements = ScoringElements()
     key_files = list(collect_key_files(codebase))
     checker_by_fields = (
-        ('declared_license', check_for_declared_licenses),
-        ('identification_precision', check_declared_licenses),
-        ('has_license_text', check_for_license_texts),
-        ('declared_copyrights', check_for_copyrights),
+        ('declared_license', check_for_declared_licenses, 40),
+        ('identification_precision', check_declared_licenses, 40),
+        ('has_license_text', check_for_license_texts, 10),
+        ('declared_copyrights', check_for_copyrights, 10),
+        ('conflicting_license_categories', check_for_conflicting_licenses, -20),
     )
-    check(key_files, checker_by_fields, scoring_elements)
 
-    if scoring_elements.declared_license:
-        scoring_elements.score += 40
-    if scoring_elements.identification_precision:
-        scoring_elements.score += 40
-    if scoring_elements.has_license_text:
-        scoring_elements.score += 10
-    if scoring_elements.declared_copyrights:
-        scoring_elements.score += 10
-
-    conflicting_declared_licenses = check_for_conflicting_licenses(key_files)
-    if not conflicting_declared_licenses:
-        conflicting_resources = check_for_conflicting_licenses_codebase(codebase)
-        if conflicting_resources:
-            scoring_elements.conflicting_license_categories = True
-            if scoring_elements.score > 0:
-                scoring_elements.score -= 20
-
-            license_expressions_by_category = defaultdict(list)
-            for cr in conflicting_resources:
-                for license in cr.licenses:
-                    category = license.get('category')
-                    license_key = license.get('key')
-                    if not (category and license_key):
-                        continue
-                    license_expressions = license_expressions_by_category[category]
-                    if license_key in license_expressions:
-                        continue
-                    license_expressions.append(license_key)
-
-            license_categories = [
-                {
-                    'category': category,
-                    "license_expressions": license_expressions,
-                } for category, license_expressions in license_expressions_by_category.items()
-            ]
-            conflicting_paths = [cr.path for cr in conflicting_resources]
-
-            scoring_elements.ambiguity_clue['conflicting_license_categories'] = {
-                'description': 'Incompatible licenses detected in Resources',
-                'license_categories': license_categories,
-                'conflicting_paths': conflicting_paths
-            }
+    for field_name, checker, score in checker_by_fields:
+        check = checker(
+            key_files,
+            scoring_elements=scoring_elements,
+            codebase=codebase
+        )
+        setattr(scoring_elements, field_name, check)
+        if check:
+            scoring_elements.score += score
 
     license_expressions = get_license_expressions_from_key_files(key_files)
     declared_license_expression = get_primary_license(license_expressions)
@@ -194,23 +161,13 @@ def compute_license_score(codebase):
             scoring_elements.score -= 10
 
         scoring_elements.ambiguity_clue['ambiguous_compound_licensing'] = {
-            'description': 'A license choice cannot be determined from declared licenses from key files.',
+            'description': 'A license choice cannot be determined using the declared licenses from key files.',
             'key_file_paths': [
                 key_file.path for key_file in key_files if key_file.licenses
             ]
         }
 
     return scoring_elements, declared_license_expression or ''
-
-
-def get_license_expressions(license_infos):
-    license_expressions = []
-    for license_info in license_infos:
-        license_expression = license_info.get('matched_rule', {}).get('license_expression', '')
-        if license_expression in license_expressions:
-            continue
-        license_expressions.append(license_expression)
-    return license_expressions
 
 
 def unique(objects):
@@ -224,6 +181,15 @@ def unique(objects):
             uniques.append(obj)
             seen.add(obj)
     return uniques
+
+
+def collect_key_files(codebase):
+    for resource in codebase.walk(topdown=True):
+        if not (resource.is_dir and resource.is_top_level):
+            continue
+        for child in resource.walk(codebase):
+            if child.is_key_file:
+                yield child
 
 
 @attr.s()
@@ -308,14 +274,7 @@ def is_good_license(detected_license):
     return False
 
 
-def check_for_declared_licenses(key_files):
-    for key_file in key_files:
-        if key_file.licenses:
-            return True
-    return False
-
-
-def check_declared_licenses(key_files):
+def check_declared_licenses(key_files, **kwargs):
     """
     Check if at least one of the licenses in `declared_licenses` is good.
 
@@ -329,7 +288,14 @@ def check_declared_licenses(key_files):
     return False
 
 
-def check_for_license_texts(key_files):
+def check_for_declared_licenses(key_files, **kwargs):
+    for key_file in key_files:
+        if key_file.licenses:
+            return True
+    return False
+
+
+def check_for_license_texts(key_files, **kwargs):
     """
     Check if any license in `declared_licenses` is from a license text or notice.
 
@@ -349,50 +315,11 @@ def check_for_license_texts(key_files):
     return False
 
 
-def check_for_copyrights(key_files):
+def check_for_copyrights(key_files, **kwargs):
     for key_file in key_files:
         if key_file.copyrights:
             return True
     return False
-
-
-def check_for_conflicting_licenses(key_files):
-    """
-    Return a list of conflicting licenses from `declared_licenses` by checking
-    whether or not if the licenses in `declared_licenses` are permissively
-    licensed, or compatible with permissive licenses.
-    """
-    conflicting_licenses = []
-    for key_file in key_files:
-        for declared_license in key_file.licenses:
-            if is_conflicting_license(declared_license):
-                conflicting_licenses.append(declared_license)
-    return conflicting_licenses
-
-
-def check_for_conflicting_licenses_codebase(codebase):
-    conflicting_licenses_resources = []
-    for resource in codebase.walk(topdown=True):
-        if resource.is_key_file:
-           continue
-        for license in resource.licenses:
-            if is_conflicting_license(license):
-                conflicting_licenses_resources.append(resource)
-    return conflicting_licenses_resources
-
-
-def check(key_files, checker_by_fields, scoring_elements):
-    for field_name, checker in checker_by_fields:
-        setattr(scoring_elements, field_name, checker(key_files))
-
-
-def collect_key_files(codebase):
-    for resource in codebase.walk(topdown=True):
-        if not (resource.is_dir and resource.is_top_level):
-            continue
-        for child in resource.walk(codebase):
-            if child.is_key_file:
-                yield child
 
 
 CONFLICTING_LICENSE_CATEGORIES = (
@@ -412,6 +339,93 @@ def is_conflicting_license(license_info):
     if license_category in CONFLICTING_LICENSE_CATEGORIES:
         return True
     return False
+
+
+def check_key_files_licenses(key_files):
+    """
+    Return a list of conflicting licenses from `declared_licenses` by checking
+    whether or not if the licenses in `declared_licenses` are permissively
+    licensed, or compatible with permissive licenses.
+    """
+    conflicting_licenses = []
+    for key_file in key_files:
+        for declared_license in key_file.licenses:
+            if is_conflicting_license(declared_license):
+                conflicting_licenses.append(declared_license)
+    return conflicting_licenses
+
+
+def check_codebase_licenses(codebase):
+    """
+    Return a list of Resources from `codebase` if they have a license that
+    conflicts with permissive licenses.
+    """
+    conflicting_licenses_resources = []
+    for resource in codebase.walk(topdown=True):
+        if resource.is_key_file:
+           continue
+        for license in resource.licenses:
+            if is_conflicting_license(license):
+                conflicting_licenses_resources.append(resource)
+    return conflicting_licenses_resources
+
+
+def check_for_conflicting_licenses(key_files, scoring_elements, codebase):
+    """
+    Return True if licenses from Resources in `codebase` conflict with the
+    declared licenses from `key_files`, otherwise return False.
+    """
+    conflicting_declared_licenses = check_key_files_licenses(key_files)
+
+    # If no declared licenses is copyleft or in a license category that
+    # conflicts with permissive licenses, then we check to see if the other
+    # Resources have conflicting licenses.
+    if not conflicting_declared_licenses:
+        conflicting_resources = check_codebase_licenses(codebase)
+        if conflicting_resources:
+            license_expressions_by_category = defaultdict(list)
+            for cr in conflicting_resources:
+                for license in cr.licenses:
+                    category = license.get('category')
+                    license_key = license.get('key')
+                    if not (category and license_key):
+                        continue
+                    license_expressions = license_expressions_by_category[category]
+                    if license_key in license_expressions:
+                        continue
+                    license_expressions.append(license_key)
+
+            license_categories = [
+                {
+                    'category': category,
+                    "license_expressions": license_expressions,
+                } for category, license_expressions in license_expressions_by_category.items()
+            ]
+
+            conflicting_paths = []
+            for cr in conflicting_resources:
+                path = cr.path
+                if path in conflicting_paths:
+                    continue
+                conflicting_paths.append(path)
+
+            scoring_elements.ambiguity_clue['conflicting_license_categories'] = {
+                'description': 'Incompatible licenses detected in Resources',
+                'license_categories': license_categories,
+                'conflicting_paths': conflicting_paths
+            }
+            return True
+    return False
+
+
+def get_license_expressions_from_key_files(key_files):
+    license_expressions = []
+    for key_file in key_files:
+        for license_expression in key_file.license_expressions:
+            if license_expression in license_expressions:
+                continue
+            license_expressions.append(license_expression)
+    return license_expressions
 
 
 def group_license_expressions(unique_license_expressions):
@@ -453,16 +467,6 @@ def group_license_expressions(unique_license_expressions):
         unique_joined_expressions = joined_expressions
 
     return unique_joined_expressions, single_expressions
-
-
-def get_license_expressions_from_key_files(key_files):
-    license_expressions = []
-    for key_file in key_files:
-        for license_expression in key_file.license_expressions:
-            if license_expression in license_expressions:
-                continue
-            license_expressions.append(license_expression)
-    return license_expressions
 
 
 def get_primary_license(declared_license_expressions):
@@ -514,3 +518,30 @@ def get_primary_license(declared_license_expressions):
         return next(iter(single_expressions_by_joined_expressions))
     else:
         return ''
+
+
+def get_field_values_from_codebase_resources(codebase, field_name, key_files_only=False):
+    """
+    Return a list of values from the `field_name` field of the Resources from
+    `codebase`
+
+    If `key_files_only` is True, then we only return the field values from
+    Resources classified as key files.
+
+    If `key_files_only` is False, then we return the field values from Resources
+    that are not classified as key files.
+    """
+    values = []
+    for resource in codebase.walk(topdown=True):
+        if not (resource.is_dir and resource.is_top_level):
+            continue
+        for child in resource.walk(codebase):
+            if key_files_only:
+                if not child.is_key_file:
+                    continue
+            else:
+                if child.is_key_file:
+                    continue
+            for detected_license in getattr(child, field_name, []) or []:
+                values.append(detected_license)
+    return values

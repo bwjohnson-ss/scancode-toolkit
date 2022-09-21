@@ -10,7 +10,16 @@
       "has_license_text": true,
       "declared_copyrights": true,
       "conflicting_license_categories": false,
-      "ambiguous_compound_licensing": true
+      "ambiguous_compound_licensing": true,
+      "ambiguity_clue": {
+        "ambiguous_compound_licensing": {
+          "description": "A license choice cannot be determined using the declared licenses from key files.",
+          "key_file_paths": [
+            "ambiguous/apache-2.0.LICENSE",
+            "ambiguous/mit.LICENSE"
+          ]
+        }
+      }
     },
     "declared_holder": "Example Corp.",
     "primary_language": "",

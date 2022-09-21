@@ -11,17 +11,17 @@
       "ambiguous_compound_licensing": false,
       "ambiguity_clue": {
         "conflicting_license_categories": {
-          "clue": "Incompatible licenses detected in Resources",
-          "conflicting_license_expressions": [
-            "gpl-2.0-plus"
-          ],
-          "conflicting_resources": [
+          "description": "Incompatible licenses detected in Resources",
+          "license_categories": [
             {
-              "path": "inconsistent_licenses_copyleft/util.js",
+              "category": "Copyleft",
               "license_expressions": [
                 "gpl-2.0-plus"
               ]
             }
+          ],
+          "conflicting_paths": [
+            "inconsistent_licenses_copyleft/util.js"
           ]
         }
       }

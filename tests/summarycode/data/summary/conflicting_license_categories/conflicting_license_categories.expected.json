@@ -10,7 +10,32 @@
       "has_license_text": true,
       "declared_copyrights": true,
       "conflicting_license_categories": true,
-      "ambiguous_compound_licensing": true
+      "ambiguous_compound_licensing": true,
+      "ambiguity_clue": {
+        "conflicting_license_categories": {
+          "description": "Incompatible licenses detected in Resources",
+          "license_categories": [
+            {
+              "category": "Copyleft",
+              "license_expressions": [
+                "gpl-1.0-plus",
+                "gpl-2.0",
+                "gpl-2.0-plus"
+              ]
+            }
+          ],
+          "conflicting_paths": [
+            "codebase/tests/test_a.py"
+          ]
+        },
+        "ambiguous_compound_licensing": {
+          "description": "A license choice cannot be determined using the declared licenses from key files.",
+          "key_file_paths": [
+            "codebase/apache-2.0.LICENSE",
+            "codebase/mit.LICENSE"
+          ]
+        }
+      }
     },
     "declared_holder": "Example Corp.",
     "primary_language": "Python",
