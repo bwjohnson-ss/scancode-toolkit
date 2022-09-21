@@ -162,8 +162,11 @@ def compute_license_score(codebase):
 
         scoring_elements.ambiguity_clue['ambiguous_compound_licensing'] = {
             'description': 'A license choice cannot be determined using the declared licenses from key files.',
-            'key_file_paths': [
-                key_file.path for key_file in key_files if key_file.licenses
+            'key_files': [
+                {
+                    'path': key_file.path,
+                    'license_expressions': key_file.license_expressions,
+                } for key_file in key_files if key_file.license_expressions
             ]
         }
 

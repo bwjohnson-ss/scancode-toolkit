@@ -30,9 +30,19 @@
         },
         "ambiguous_compound_licensing": {
           "description": "A license choice cannot be determined using the declared licenses from key files.",
-          "key_file_paths": [
-            "codebase/apache-2.0.LICENSE",
-            "codebase/mit.LICENSE"
+          "key_files": [
+            {
+              "path": "codebase/apache-2.0.LICENSE",
+              "license_expressions": [
+                "apache-2.0"
+              ]
+            },
+            {
+              "path": "codebase/mit.LICENSE",
+              "license_expressions": [
+                "mit"
+              ]
+            }
           ]
         }
       }
