@@ -165,7 +165,7 @@ def compute_license_score(codebase):
             'key_files': [
                 {
                     'path': key_file.path,
-                    'license_expressions': key_file.license_expressions,
+                    'license_expressions': unique(key_file.license_expressions),
                 } for key_file in key_files if key_file.license_expressions
             ]
         }
@@ -188,11 +188,8 @@ def unique(objects):
 
 def collect_key_files(codebase):
     for resource in codebase.walk(topdown=True):
-        if not (resource.is_dir and resource.is_top_level):
-            continue
-        for child in resource.walk(codebase):
-            if child.is_key_file:
-                yield child
+        if resource.is_key_file:
+            yield resource
 
 
 @attr.s()
