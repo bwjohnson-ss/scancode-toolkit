@@ -12,16 +12,12 @@
       "ambiguity_clue": {
         "conflicting_license_categories": {
           "description": "Incompatible licenses detected in Resources",
-          "license_categories": [
+          "conflicting_resources": [
             {
-              "category": "Copyleft",
-              "license_expressions": [
-                "gpl-2.0-plus"
-              ]
+              "path": "inconsistent_licenses_copyleft/util.js",
+              "license_category": "Copyleft",
+              "license_expression": "gpl-2.0-plus"
             }
-          ],
-          "conflicting_paths": [
-            "inconsistent_licenses_copyleft/util.js"
           ]
         }
       }

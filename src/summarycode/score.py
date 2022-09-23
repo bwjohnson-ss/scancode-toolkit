@@ -365,7 +365,10 @@ def check_codebase_licenses(codebase):
         if resource.is_key_file:
            continue
         for license in resource.licenses:
-            if is_conflicting_license(license):
+            if (
+                is_conflicting_license(license)
+                and resource not in conflicting_licenses_resources
+            ):
                 conflicting_licenses_resources.append(resource)
     return conflicting_licenses_resources
 
@@ -383,36 +386,26 @@ def check_for_conflicting_licenses(key_files, scoring_elements, codebase):
     if not conflicting_declared_licenses:
         conflicting_resources = check_codebase_licenses(codebase)
         if conflicting_resources:
-            license_expressions_by_category = defaultdict(list)
-            for cr in conflicting_resources:
-                for license in cr.licenses:
-                    category = license.get('category')
-                    license_key = license.get('key')
-                    if not (category and license_key):
+            crs = []
+            for conflicting_resource in conflicting_resources:
+                seen_license_expression = set()
+                for license in conflicting_resource.licenses:
+                    if not is_conflicting_license(license):
                         continue
-                    license_expressions = license_expressions_by_category[category]
-                    if license_key in license_expressions:
+                    license_expression = license.get('matched_rule', {}).get('license_expression', '')
+                    if license_expression in seen_license_expression:
                         continue
-                    license_expressions.append(license_key)
-
-            license_categories = [
-                {
-                    'category': category,
-                    "license_expressions": license_expressions,
-                } for category, license_expressions in license_expressions_by_category.items()
-            ]
-
-            conflicting_paths = []
-            for cr in conflicting_resources:
-                path = cr.path
-                if path in conflicting_paths:
-                    continue
-                conflicting_paths.append(path)
-
+                    crs.append(
+                        {
+                            'path': conflicting_resource.path,
+                            'license_category': license['category'],
+                            'license_expression': license_expression
+                        }
+                    )
+                    seen_license_expression.add(license_expression)
             scoring_elements.ambiguity_clue['conflicting_license_categories'] = {
                 'description': 'Incompatible licenses detected in Resources',
-                'license_categories': license_categories,
-                'conflicting_paths': conflicting_paths
+                'conflicting_resources': crs
             }
             return True
     return False
